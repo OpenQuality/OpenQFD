@@ -32,6 +32,17 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Install UPX (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        continue-on-error: true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx-ucl
+          # PyInstaller looks for a binary literally named "upx" on PATH;
+          # Ubuntu's package installs it as upx-ucl.
+          command -v upx || sudo ln -sf "$(command -v upx-ucl)" /usr/local/bin/upx
+          upx --version
+
       - name: Generate macOS icon
         if: matrix.os == 'macos-latest'
         continue-on-error: true

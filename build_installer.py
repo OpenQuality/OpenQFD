@@ -80,6 +80,12 @@ def build():
         "--exclude-module=PySide6.QtPdfWidgets",
         "--exclude-module=lxml",
     ]
+    # --strip removes debug/symbol-table info from the bundled binaries and shared
+    # libs. PyInstaller docs explicitly advise against it on Windows (PE binaries
+    # there don't carry the same debug info and it can break signing), but on
+    # Linux/macOS ELF/Mach-O builds it noticeably shrinks the onefile payload.
+    if os.name != "nt":
+        cmd.append("--strip")
     if sys.platform == "darwin" and os.path.exists(ICON_MAC):
         cmd.append(f"--icon={ICON_MAC}")
     elif os.name == "nt" and os.path.exists(ICON_WIN):
