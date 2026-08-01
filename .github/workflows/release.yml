@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+          - os: ubuntu-latest
+            name: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Generate macOS icon
+        if: matrix.os == 'macos-latest'
+        continue-on-error: true
+        run: |
+          mkdir qfd.iconset
+          sips -z 16 16   assets/icon_16.png  --out qfd.iconset/icon_16x16.png
+          sips -z 32 32   assets/icon_32.png  --out qfd.iconset/icon_16x16@2x.png
+          sips -z 32 32   assets/icon_32.png  --out qfd.iconset/icon_32x32.png
+          sips -z 64 64   assets/icon_64.png  --out qfd.iconset/icon_32x32@2x.png
+          sips -z 128 128 assets/icon_128.png --out qfd.iconset/icon_128x128.png
+          sips -z 256 256 assets/icon_256.png --out qfd.iconset/icon_128x128@2x.png
+          sips -z 256 256 assets/icon_256.png --out qfd.iconset/icon_256x256.png
+          sips -z 512 512 assets/icon_512.png --out qfd.iconset/icon_256x256@2x.png
+          sips -z 512 512 assets/icon_512.png --out qfd.iconset/icon_512x512.png
+          cp assets/icon_512.png qfd.iconset/icon_512x512@2x.png
+          iconutil -c icns qfd.iconset -o assets/qfd.icns
+
+      - name: Build
+        run: python build_installer.py
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: Compress-Archive -Path dist/OpenQFD.exe -DestinationPath OpenQFD-windows.zip
+
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent OpenQFD.app ../OpenQFD-macos.zip
+
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          chmod +x dist/OpenQFD
+          cd dist
+          zip ../OpenQFD-linux.zip OpenQFD
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenQFD-${{ matrix.name }}
+          path: OpenQFD-${{ matrix.name }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p out
+          find artifacts -name '*.zip' -exec cp {} out/ \;
+          ls -la out
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: out/*.zip
